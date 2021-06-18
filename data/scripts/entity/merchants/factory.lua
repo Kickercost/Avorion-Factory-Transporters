@@ -13,58 +13,62 @@ function Factory.updateFetchingFromDockedStations(timeStep)
 
     for index, id in pairs(ids) do
         local trades = Factory.trader.deliveringStations[id]
-        local trade = randomEntry(random(), trades)
-
         local station = Sector():getEntity(id)
-        if not station then goto continue end
+        if not station then
+            goto continue_stations
+        end
 
         if station.dockingParent ~= self.id and self.dockingParent ~= station.id and not self:isInDockingArea(station) then
-            goto continue
+            goto continue_stations
         end
+        for k, trade in pairs(trades) do
 
-        local errorCode, amount, maxAmount = station:invokeFunction(trade.script, "getStock", trade.good)
-        if errorCode ~= 0 then
-            newDeliveringStationsErrors[index] = "Error with partner station!"%_T
-            print ("error requesting goods from other station: " .. errorCode .. " " .. station.title)
-            goto continue
+            local errorCode, currentSourceAmount, maxSourceAmount = station:invokeFunction(trade.script, "getStock", trade.good)
+            if errorCode ~= 0 then
+                newDeliveringStationsErrors[index] = "Error with partner station!" % _T
+                print("error requesting goods from other station: " .. errorCode .. " " .. station.title)
+                goto continue_trades
+            end
+
+            if currentSourceAmount == 0 then
+                newDeliveringStationsErrors[index] = "No more goods on partner station!" % _T
+                goto continue_trades
+            end
+
+            local thisStockAmount, thisStockMaxAmount = Factory.getStock(trade.good)
+            if thisStockAmount >= thisStockMaxAmount then
+                newDeliveringStationsErrors[index] = "Station at full capacity!" % _T
+                goto continue_trades
+            end
+
+            local good = goods[trade.good]:good()
+            if not good then
+                goto continue_trades
+            end
+
+            if self.freeCargoSpace < good.size then
+                newDeliveringStationsErrors[index] = "Station at full capacity!" % _T
+                goto continue_trades
+            end
+
+            local amountToBuy = math.min(currentSourceAmount, thisStockMaxAmount)
+
+            local error1, error2 = station:invokeFunction(trade.script, "sellGoods", good, amountToBuy, self.factionIndex)
+            if error1 ~= 0 then
+                newDeliveringStationsErrors[index] = "Error with partner station!" % _T
+                goto continue_trades
+            end
+
+            if error2 ~= 0 then
+                newDeliveringStationsErrors[index] = Factory.getSellGoodsErrorMessage(error2)
+                goto continue_trades
+            end
+
+            self:addCargo(good, amountToBuy)
+
+            :: continue_trades ::
         end
-
-        if amount == 0 then
-            newDeliveringStationsErrors[index] = "No more goods on partner station!"%_T
-            goto continue
-        end
-
-        local amount, maxAmount = Factory.getStock(trade.good)
-        if amount >= maxAmount then
-            newDeliveringStationsErrors[index] = "Station at full capacity!"%_T
-            goto continue
-        end
-
-        local good = goods[trade.good]:good()
-        if not good then return end
-
-        if self.freeCargoSpace < good.size then
-            newDeliveringStationsErrors[index] = "Station at full capacity!"%_T
-            goto continue
-        end
-
-        local amount = math.max(1, math.floor(10 / good.size))
-
-        local error1, error2 = station:invokeFunction(trade.script, "sellGoods", good, amount, self.factionIndex)
-        if error1 ~= 0 then
-            newDeliveringStationsErrors[index] = "Error with partner station!"%_T
-            goto continue
-        end
-
-        if error2 ~= 0 then
-            newDeliveringStationsErrors[index] = Factory.getSellGoodsErrorMessage(error2)
-            goto continue
-        end
-
-        self:addCargo(good, amount)
-
-        break
-        ::continue::
+        :: continue_stations ::
     end
 end
 
@@ -83,55 +87,60 @@ function Factory.updateDeliveryToDockedStations(timeStep)
 
     for index, id in pairs(ids) do
         local trades = Factory.trader.deliveredStations[id]
-        local trade = randomEntry(random(), trades)
-
         local station = sector:getEntity(id)
         if not station then
-            newDeliveredStationsErrors[index] = "Error with partner station!"%_T
-            goto continue
+            newDeliveredStationsErrors[index] = "Error with partner station!" % _T
+            goto continue_stations
         end
-
         if station.dockingParent ~= self.id and self.dockingParent ~= station.id and not self:isInDockingArea(station) then
-            goto continue
+            goto continue_stations
         end
 
-        local amount = self:getCargoAmount(trade.good)
-        if amount == 0 then
-            newDeliveredStationsErrors[index] = "No more goods!"%_T
-            goto continue
+        for k, trade in pairs(trades) do
+
+            local amount = self:getCargoAmount(trade.good)
+            if amount == 0 then
+                newDeliveredStationsErrors[index] = "No more goods!" % _T
+                goto continue_trades
+            end
+
+            local good = Factory.getSoldGoodByName(trade.good)
+            if not good then
+                newDeliveredStationsErrors[index] = "Partner station doesn't buy this!" % _T
+                goto continue_trades
+            end
+
+            local getStockResult, currentDestinationAmount,maxDestinationAmount =  station:invokeFunction(trade.script, "getStock", trade.good)
+            local thisStockAmount,thisStockMaxAmount = Factory.getStock(trade.good)
+            local amountToSell = math.min(maxDestinationAmount,thisStockAmount)
+            print("current des stock:".. currentDestinationAmount .. " max des stock:" .. maxDestinationAmount)
+            ---- do the transaction
+            local errorCode1, errorCode2 = station:invokeFunction(trade.script, "buyGoods", good, amountToSell, self.factionIndex, true)
+            if errorCode1 ~= 0 then
+                newDeliveredStationsErrors[index] = "Error with partner station!" % _T
+                goto continue_trades
+            end
+
+            if errorCode2 ~= 0 then
+                newDeliveredStationsErrors[index] = Factory.getBuyGoodsErrorMessage(errorCode2)
+                goto continue_trades
+
+            end
+
+            station:addCargo(good, amountToSell)
+
+            Factory.decreaseGoods(trade.good, amountToSell)
+            :: continue_trades ::
         end
-
-        local good = Factory.getSoldGoodByName(trade.good)
-        if not good then
-            newDeliveredStationsErrors[index] = "Partner station doesn't buy this!"%_T
-            goto continue
-        end
-
-        local amount = math.max(1, math.floor(10 / good.size))
-
-        -- do the transaction
-        local errorCode1, errorCode2 = station:invokeFunction(trade.script, "buyGoods", good, amount, self.factionIndex, true)
-        if errorCode1 ~= 0 then
-            newDeliveredStationsErrors[index] = "Error with partner station!"%_T
-            goto continue
-        end
-
-        if errorCode2 ~= 0 then
-            newDeliveredStationsErrors[index] = Factory.getBuyGoodsErrorMessage(errorCode2)
-            goto continue
-        end
-
-        station:addCargo(good, amount)
-
-        Factory.decreaseGoods(trade.good, amount)
-
-        break
-        ::continue::
+        :: continue_stations ::
     end
+
 end
 
 function Factory.updateFetchingShuttleStarts(timeStep)
-    if tablelength(deliveryShuttles) >= 20 then return end
+    if tablelength(deliveryShuttles) >= 20 then
+        return
+    end
 
     local sector = Sector()
     local self = Entity()
@@ -151,7 +160,9 @@ function Factory.updateFetchingShuttleStarts(timeStep)
         local trade = randomEntry(random(), trades)
 
         local station = Sector():getEntity(id)
-        if not station then goto continue end
+        if not station then
+            goto continue
+        end
 
         -- if docked, no need to send shuttles
         if station.dockingParent == self.id or self.dockingParent == station.id or self:isInDockingArea(station) then
@@ -167,27 +178,29 @@ function Factory.updateFetchingShuttleStarts(timeStep)
 
         local errorCode, amount, maxAmount = station:invokeFunction(trade.script, "getStock", trade.good)
         if errorCode ~= 0 then
-            newDeliveringStationsErrors[index] = "Error with partner station!"%_T
-            print ("error requesting goods from other station: " .. errorCode .. " " .. station.title)
+            newDeliveringStationsErrors[index] = "Error with partner station!" % _T
+            print("error requesting goods from other station: " .. errorCode .. " " .. station.title)
             goto continue
         end
 
         if amount == 0 then
-            newDeliveringStationsErrors[index] = "No more goods on partner station!"%_T
+            newDeliveringStationsErrors[index] = "No more goods on partner station!" % _T
             goto continue
         end
 
         local amount, maxAmount = Factory.getStock(trade.good)
         if amount >= maxAmount then
-            newDeliveringStationsErrors[index] = "Station at full capacity!"%_T
+            newDeliveringStationsErrors[index] = "Station at full capacity!" % _T
             goto continue
         end
 
         local good = goods[trade.good]:good()
-        if not good then return end
+        if not good then
+            return
+        end
 
         if self.freeCargoSpace < good.size then
-            newDeliveringStationsErrors[index] = "Station at full capacity!"%_T
+            newDeliveringStationsErrors[index] = "Station at full capacity!" % _T
             goto continue
         end
 
@@ -216,7 +229,7 @@ function Factory.updateFetchingShuttleStarts(timeStep)
 
             local error1, error2 = station:invokeFunction(trade.script, "sellGoods", good, amount, self.factionIndex)
             if error1 ~= 0 then
-                newDeliveringStationsErrors[index] = "Error with partner station!"%_T
+                newDeliveringStationsErrors[index] = "Error with partner station!" % _T
                 goto continue
             end
 
@@ -228,15 +241,19 @@ function Factory.updateFetchingShuttleStarts(timeStep)
             self:addCargo(good, amount)
         end
 
-        if true then return end -- lua grammar doesn't allow statements in a block after a 'return'
-        ::continue::
+        if true then
+            return
+        end -- lua grammar doesn't allow statements in a block after a 'return'
+        :: continue ::
 
     end
 
 end
 
 function Factory.updateDeliveryShuttleStarts(timeStep)
-    if tablelength(deliveryShuttles) >= 20 then return end
+    if tablelength(deliveryShuttles) >= 20 then
+        return
+    end
 
     local sector = Sector()
     local self = Entity()
@@ -257,7 +274,7 @@ function Factory.updateDeliveryShuttleStarts(timeStep)
 
         local station = sector:getEntity(id)
         if not station then
-            newDeliveredStationsErrors[index] = "Error with partner station!"%_T
+            newDeliveredStationsErrors[index] = "Error with partner station!" % _T
             goto continue
         end
 
@@ -275,13 +292,13 @@ function Factory.updateDeliveryShuttleStarts(timeStep)
 
         local amount = self:getCargoAmount(trade.good)
         if amount == 0 then
-            newDeliveredStationsErrors[index] = "No more goods!"%_T
+            newDeliveredStationsErrors[index] = "No more goods!" % _T
             goto continue
         end
 
         local good = Factory.getSoldGoodByName(trade.good)
         if not good then
-            newDeliveredStationsErrors[index] = "Partner station doesn't buy this!"%_T
+            newDeliveredStationsErrors[index] = "Partner station doesn't buy this!" % _T
             goto continue
         end
 
@@ -291,7 +308,7 @@ function Factory.updateDeliveryShuttleStarts(timeStep)
         -- do the transaction, use 1 good
         local errorCode1, errorCode2 = station:invokeFunction(trade.script, "buyGoods", good, amount, self.factionIndex, true)
         if errorCode1 ~= 0 then
-            newDeliveredStationsErrors[index] = "Error with partner station!"%_T
+            newDeliveredStationsErrors[index] = "Error with partner station!" % _T
             goto continue
         end
 
@@ -305,7 +322,7 @@ function Factory.updateDeliveryShuttleStarts(timeStep)
             local shuttle, errorCode = controller:startFighterOfType(FighterType.CargoShuttle)
             if not shuttle then
                 newDeliveredStationsErrors[index] = Factory.getFighterStartErrorMessage(errorCode)
-                print ("FATAL error starting fighter: " .. errorCode)
+                print("FATAL error starting fighter: " .. errorCode)
                 goto continue
             end
 
@@ -326,8 +343,10 @@ function Factory.updateDeliveryShuttleStarts(timeStep)
 
         Factory.decreaseGoods(trade.good, amount)
 
-        if true then return end -- lua grammar doesn't allow statements in a block after a 'return'
-        ::continue::
+        if true then
+            return
+        end -- lua grammar doesn't allow statements in a block after a 'return'
+        :: continue ::
     end
 
 end
