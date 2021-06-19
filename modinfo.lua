@@ -4,7 +4,7 @@ meta =
     -- ID of your mod; Make sure this is unique!
     -- Will be used for identifying the mod in dependency lists
     -- Will be changed to workshop ID (ensuring uniqueness) when you upload the mod to the workshop
-    id = "Factory-Transporters",
+    id = "2520635957",
 
     -- Name of your mod; You may want this to be unique, but it's not absolutely necessary.
     -- This is an additional helper attribute for you to easily identify your mod in the Mods() list
@@ -17,16 +17,16 @@ meta =
     type = "mod",
 
     -- Description of your mod that will be displayed to players
-    description = "Enables Factories to actually make use of any equiped transporters when determining if another factory is docked",
+    description = "Enables Factories to actually make use of any equiped transporters when determining if another factory is docked. Will teleport to any factory that is in range of another station via teleporter systems. So start stacking those systems!\n Works well with our companion mod :https://steamcommunity.com/sharedfiles/filedetails/?id=2518190493",
 
     -- Insert all authors into this list
-    authors = {"Social"},
+    authors = {"Social", "drenith"},
 
     -- Version of your mod, should be in format 1.0.0 (major.minor.patch) or 1.0 (major.minor)
     -- This will be used to check for unmet dependencies or incompatibilities, and to check compatibility between clients and dedicated servers with mods.
     -- If a client with an unmatching major or minor mod version wants to log into a server, login is prohibited.
     -- Unmatching patch version still allows logging into a server. This works in both ways (server or client higher or lower version).
-    version = "1.0",
+    version = "1.0.1",
 
     -- If your mod requires dependencies, enter them here. The game will check that all dependencies given here are met.
     -- Possible attributes:

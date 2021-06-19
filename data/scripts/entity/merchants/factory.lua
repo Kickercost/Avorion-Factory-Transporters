@@ -26,7 +26,6 @@ function Factory.updateFetchingFromDockedStations(timeStep)
             local errorCode, currentSourceAmount, maxSourceAmount = station:invokeFunction(trade.script, "getStock", trade.good)
             if errorCode ~= 0 then
                 newDeliveringStationsErrors[index] = "Error with partner station!" % _T
-                print("error requesting goods from other station: " .. errorCode .. " " .. station.title)
                 goto continue_trades
             end
 
@@ -113,7 +112,6 @@ function Factory.updateDeliveryToDockedStations(timeStep)
             local getStockResult, currentDestinationAmount,maxDestinationAmount =  station:invokeFunction(trade.script, "getStock", trade.good)
             local thisStockAmount,thisStockMaxAmount = Factory.getStock(trade.good)
             local amountToSell = math.min(maxDestinationAmount,thisStockAmount)
-            print("current des stock:".. currentDestinationAmount .. " max des stock:" .. maxDestinationAmount)
             ---- do the transaction
             local errorCode1, errorCode2 = station:invokeFunction(trade.script, "buyGoods", good, amountToSell, self.factionIndex, true)
             if errorCode1 ~= 0 then
