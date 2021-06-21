@@ -1,3 +1,5 @@
+
+
 function Factory.updateFetchingFromDockedStations(timeStep)
     local sector = Sector()
     local self = Entity()
@@ -22,7 +24,6 @@ function Factory.updateFetchingFromDockedStations(timeStep)
             goto continue_stations
         end
         for k, trade in pairs(trades) do
-
             local errorCode, currentSourceAmount, maxSourceAmount = station:invokeFunction(trade.script, "getStock", trade.good)
             if errorCode ~= 0 then
                 newDeliveringStationsErrors[index] = "Error with partner station!" % _T
@@ -45,12 +46,16 @@ function Factory.updateFetchingFromDockedStations(timeStep)
                 goto continue_trades
             end
 
+
+
             if self.freeCargoSpace < good.size then
                 newDeliveringStationsErrors[index] = "Station at full capacity!" % _T
                 goto continue_trades
             end
 
-            local amountToBuy = math.min(currentSourceAmount, thisStockMaxAmount)
+            local amountToBuy = Factory.calculateSafeTransferAmount(station, self, trade)
+
+
 
             local error1, error2 = station:invokeFunction(trade.script, "sellGoods", good, amountToBuy, self.factionIndex)
             if error1 ~= 0 then
@@ -87,6 +92,7 @@ function Factory.updateDeliveryToDockedStations(timeStep)
     for index, id in pairs(ids) do
         local trades = Factory.trader.deliveredStations[id]
         local station = sector:getEntity(id)
+
         if not station then
             newDeliveredStationsErrors[index] = "Error with partner station!" % _T
             goto continue_stations
@@ -97,8 +103,8 @@ function Factory.updateDeliveryToDockedStations(timeStep)
 
         for k, trade in pairs(trades) do
 
-            local amount = self:getCargoAmount(trade.good)
-            if amount == 0 then
+            local amountToSell = Factory.calculateSafeTransferAmount(self, station, trade)
+            if amountToSell == 0 then
                 newDeliveredStationsErrors[index] = "No more goods!" % _T
                 goto continue_trades
             end
@@ -109,9 +115,8 @@ function Factory.updateDeliveryToDockedStations(timeStep)
                 goto continue_trades
             end
 
-            local getStockResult, currentDestinationAmount,maxDestinationAmount =  station:invokeFunction(trade.script, "getStock", trade.good)
-            local thisStockAmount,thisStockMaxAmount = Factory.getStock(trade.good)
-            local amountToSell = math.min(maxDestinationAmount,thisStockAmount)
+
+
             ---- do the transaction
             local errorCode1, errorCode2 = station:invokeFunction(trade.script, "buyGoods", good, amountToSell, self.factionIndex, true)
             if errorCode1 ~= 0 then
@@ -133,6 +138,53 @@ function Factory.updateDeliveryToDockedStations(timeStep)
         :: continue_stations ::
     end
 
+end
+
+function Factory.calculateSafeTransferAmount(source, destination, trade)
+
+    local uniqueItemCount = Factory.getUniqueItemCount(destination,trade.script)
+    local sourceCurrentStock = source:getCargoAmount(trade.good)
+    local destinationStockAmount = destination:getCargoAmount(trade.good)
+
+    local maximumSafeUsageCargoCount = math.max(0, math.floor(((destination.maxCargoSpace * .90/ math.max(1, uniqueItemCount))/ goods[trade.good].size)))
+    local destinationCapacity = math.max(0, (maximumSafeUsageCargoCount - destinationStockAmount))
+    --print("maxCartgoSpace:" .. destination.maxCargoSpace .. "good size" ..  goods[trade.good].size .. "destinationStockAmount '" .. destinationStockAmount .. "' destination cap:" .. destinationCapacity .. "' source stock:" .. sourceCurrentStock .. " max Usage Safe: " .. maximumSafeUsageCargoCount)
+    local amountToTrade = math.min(destinationCapacity, sourceCurrentStock)
+    --print("source: " .. source.name .. " destination: " .. destination.name .. " tradeGood:'" .. trade.good .. "' available for trade:" .. sourceCurrentStock .. " existing inventory:" .. destinationStockAmount .. " calculated trade amount :" .. amountToTrade)
+    return amountToTrade
+end
+
+function Factory.insertUniqueEntries(entryCollection, index,destinationUniqueItems)
+    for i = index, #entryCollection do
+        if  entryCollection[i]  then
+            destinationUniqueItems[entryCollection[i]] = true
+        end
+    end
+end
+
+function Factory.getUniqueItemCount(context, tradeScript)
+    local destinationUniqueItems = {}
+    local startIndex = 0
+    local self = Entity()
+    local boughtResults
+    local soldResults
+    if(not context == self ) then
+        boughtResults = { context:invokeFunction(tradeScript, "getBoughtGoods") }
+        soldResults = { context:invokeFunction(tradeScript, "getSoldGoods") }
+        startIndex = 2
+    else
+        boughtResults = Factory.trader.boughtGoods
+        soldResults = Factory.trader.soldGoods
+        startIndex = 1
+    end
+    Factory.insertUniqueEntries(boughtResults,startIndex,destinationUniqueItems)
+    Factory.insertUniqueEntries(soldResults,startIndex,destinationUniqueItems)
+
+    local uniqueItemCount = 0
+    for k, v in pairs(destinationUniqueItems) do
+        uniqueItemCount = uniqueItemCount + 1
+    end
+    return uniqueItemCount
 end
 
 function Factory.updateFetchingShuttleStarts(timeStep)
