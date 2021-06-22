@@ -1,6 +1,10 @@
 
 
 function Factory.updateFetchingFromDockedStations(timeStep)
+    if math.random() > 0.5 then
+        goto continue_stations
+    end
+
     local sector = Sector()
     local self = Entity()
 
@@ -77,6 +81,10 @@ function Factory.updateFetchingFromDockedStations(timeStep)
 end
 
 function Factory.updateDeliveryToDockedStations(timeStep)
+    if math.random() > 0.5 then
+        goto continue_stations
+    end
+
     local ids = {}
     for id, trades in pairs(Factory.trader.deliveredStations) do
         if #trades > 0 then
