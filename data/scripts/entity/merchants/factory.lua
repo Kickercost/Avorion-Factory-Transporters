@@ -2,7 +2,7 @@
 
 function Factory.updateFetchingFromDockedStations(timeStep)
     if math.random() > 0.5 then
-        goto continue_stations
+        goto finished
     end
 
     local sector = Sector()
@@ -78,11 +78,13 @@ function Factory.updateFetchingFromDockedStations(timeStep)
         end
         :: continue_stations ::
     end
+	
+	:: finished ::
 end
 
 function Factory.updateDeliveryToDockedStations(timeStep)
     if math.random() > 0.5 then
-        goto continue_stations
+        goto finished
     end
 
     local ids = {}
@@ -145,7 +147,8 @@ function Factory.updateDeliveryToDockedStations(timeStep)
         end
         :: continue_stations ::
     end
-
+	
+	:: finished ::
 end
 
 function Factory.calculateSafeTransferAmount(source, destination, trade)
